@@ -21,7 +21,7 @@
 
 FILE *fp2;
 
-double Speed_A = 0.00001;
+double Speed_A = 0.00002;	// 速度平滑
 
 
 
@@ -279,6 +279,14 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 					Vision_Navigation_data_unit.add_values_double(pubstate.lave_percent);
 				}
 			}
+
+			//printf("%lf\n",pubstate.lave_percent);
+			if(pubstate.lave_percent == 100)
+			{
+				printf("Oh!task_complete\n");
+				g_flag_enable_all = false;
+			}
+
 			Mesg_DataUnit* du = Vision_Navigation_pub_commondata.add_datas();
 			*du = Vision_Navigation_data_unit;
 			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
@@ -286,12 +294,6 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			//printf("Start-Target:%lf,%lf-%lf,%lf State:%lf %lf %lf Percent:%lf\n",start_point.x,start_point.y,target.x,target.y,
 			//	pubstate.after_VN_RobotPose.x,pubstate.after_VN_RobotPose.y,pubstate.after_VN_RobotPose.theta*180/M_PI,
 			//	pubstate.lave_percent);
-			
-			if(pubstate.lave_percent == 100)
-			{
-				printf("Oh!task_complete\n");
-				g_flag_enable_all = false;
-			}
 		}
 		g_mtx_pose.unlock();
 	}
@@ -388,7 +390,7 @@ int main()
 		//publish
 		SubPubManager::Instance()->m_robotspeed.Initialize(Topic::Topic_Speed,NULL);				//发布机器人的速度
 		SubPubManager::Instance()->m_robotstate.Initialize(Topic::Topic_State,NULL);				//发布机器人状态信息
-		SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_State,NULL);				//发布机器人的到点信息
+		SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_CommonInfo,NULL);			//发布机器人的到点信息
 	//}
 	//service
 	//NODE.advertiseService<bool(bool,double,double,double)>(Service::Service_OpenVisionNav,boost::bind(openVisionNav,_1,_2,_3,_4)); //开启整个导航模块，并传入初始位姿
@@ -527,11 +529,11 @@ unsigned __stdcall navigationThread(void *p)
 		//printf("after:v = %lf m/s,w = %lf rad/s\n", send_v, send_w);
 		//fprintf(fp,"POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf\n",cur_odom.x, cur_odom.y, cur_odom.theta*180.0/M_PI,send_v,send_v,vline_dist);
 		
-		g_mtx_pose.lock();
+		//g_mtx_pose.lock();
 		State_after_vn = g_nav.getVisionNavigation_RobotState();
 		publishRobotStata(State_after_vn);
 		//g_pose = g_nav.getCurPose();
-		g_mtx_pose.unlock();
+		//g_mtx_pose.unlock();
 
 	}
 	std::cout<<"End navigation thread."<<std::endl;
