@@ -379,8 +379,6 @@ int main()
 
 	SubPubManager::Instance()->m_navtask.Initialize(Topic::Topic_NavTask,update_Vision_Navigation);	//接收机器人任务指令信息
 	//Single_test();
-	//if(g_flag_enable_all)
-	//{
 		//subcribe
 		SubPubManager::Instance()->m_laser.Initialize(Topic::Topic_Laser,updateLaser);				//接收激光数据
 		SubPubManager::Instance()->m_odometer.Initialize(Topic::Topic_Odometer,updateOdometry);		//接收里程计数据
@@ -389,7 +387,6 @@ int main()
 		SubPubManager::Instance()->m_robotspeed.Initialize(Topic::Topic_Speed,NULL);				//发布机器人的速度
 		SubPubManager::Instance()->m_robotstate.Initialize(Topic::Topic_State,NULL);				//发布机器人状态信息
 		SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_State,NULL);				//发布机器人的到点信息
-	//}
 	//service
 	//NODE.advertiseService<bool(bool,double,double,double)>(Service::Service_OpenVisionNav,boost::bind(openVisionNav,_1,_2,_3,_4)); //开启整个导航模块，并传入初始位姿
 	Sleep(500);
