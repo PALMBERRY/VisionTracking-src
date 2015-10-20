@@ -50,7 +50,9 @@ CvCapture* pCapture;
 ///////// global variable ///////////////////////////////////
 // 进程外部通讯
 bool g_flag_enable_all = false; //是否开启当前模块
-bool nothing_flag;
+bool nothing_flag = false;
+
+double percent_int = 0;
 boost::mutex g_mtx_flag_enable_all;
 
 OrientedPoint g_odom;
@@ -251,16 +253,12 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 {
 	if(g_mtx_pose.try_lock())
 	{
-		Mesg_RobotState Vision_navigation_pub_state;
-		Mesg_DataUnit Vision_Navigation_data_unit;
-		Mesg_CommonData Vision_Navigation_pub_commondata;
-		Mesg_DataUnit* du = Vision_Navigation_pub_commondata.add_datas();
-		*du = Vision_Navigation_data_unit;
-
 		if(nothing_flag)
 		{
-			Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_MODULE_SLEEP);
-			Vision_Navigation_data_unit.add_values_int(3);
+			Mesg_CommonData Vision_Navigation_pub_commondata;
+			Mesg_DataUnit* unit_data = Vision_Navigation_pub_commondata.add_datas();
+			unit_data->set_flag(Mesg_DataUnit::EDUF_MODULE_SLEEP);
+			unit_data->add_values_int(3);
 			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 			printf("VisionNavigation sleeping!\n");
 			g_flag_enable_all = false;
@@ -269,6 +267,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 
 		if(g_flag_enable_all)
 		{
+			Mesg_RobotState Vision_navigation_pub_state;
 			// publish robot state message			
 			Vision_navigation_pub_state.set_x(pubstate.after_VN_RobotPose.x);
 			Vision_navigation_pub_state.set_y(pubstate.after_VN_RobotPose.y);
@@ -276,30 +275,38 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			SubPubManager::Instance()->m_robotstate.GetPublisher()->publish(Vision_navigation_pub_state);
 
 			// publish robot common data include rest-percent|stop|recovery-motion			
-			if(pubstate.stop_or_not)	//if stop
+			//Mesg_DataUnit Vision_Navigation_data_unit;
+			Mesg_CommonData Vision_Navigation_pub_commondata;
+			Mesg_DataUnit* unit_data = Vision_Navigation_pub_commondata.add_datas();
+			//*unit_data = Vision_Navigation_data_unit;
+
+			//if(pubstate.stop_or_not)	//if stop
+			if(stop_flag)
 			{
 				recovery_motion_flag = true;
-				Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_STOP_BY_OBSTACLE);
+				unit_data->set_flag(Mesg_DataUnit::EDUF_STOP_BY_OBSTACLE);
+				unit_data->add_values_int(1);
 			}
 			else
 			{
-				//if(recovery_motion_flag)	//if recovery motion fist time
-				//{
-				//	recovery_motion_flag = false;
-				//	Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_RESTORE_MOTION);
-				//}
-				//else
+				if(recovery_motion_flag)	//if recovery motion fist time
 				{
-					Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_DEST_REST_PERCENT);
-					Vision_Navigation_data_unit.add_values_double(pubstate.lave_percent);
+					recovery_motion_flag = false;
+					unit_data->set_flag(Mesg_DataUnit::EDUF_RESTORE_MOTION);
+				}
+				else
+				{
+					unit_data->set_flag(Mesg_DataUnit::EDUF_DEST_REST_PERCENT);
+					unit_data->add_values_double(pubstate.lave_percent);
 				}
 			}			
 			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 
-			//printf("Start-Target:%lf,%lf-%lf,%lf State:%lf %lf %lf Percent:%lf\n",start_point.x,start_point.y,target.x,target.y,
-			//	pubstate.after_VN_RobotPose.x,pubstate.after_VN_RobotPose.y,pubstate.after_VN_RobotPose.theta*180/M_PI,
-			//	pubstate.lave_percent);
-			
+			if(pubstate.lave_percent-percent_int>=10)
+			{
+				printf("Percent:%lf\n",pubstate.lave_percent);
+				percent_int = pubstate.lave_percent;
+			}
 			if(pubstate.lave_percent == 100)
 			{
 				Mesg_RobotSpeed completed_speed;
@@ -371,6 +378,7 @@ void update_Vision_Navigation(Mesg_NavigationTask Vision_Navi_task)
 		}
 		printf("start @ %lf %lf %lf end @ %lf %lf %lf\n",start_point.x,start_point.y,start_point.theta*180/M_PI,target.x,target.y,target.theta*180/M_PI);
 		pre_v = 0;
+		percent_int = 0;
 		//printf("start openVisionNav\n");
 		openVisionNav(g_flag_enable_all,start_point.x,start_point.y,start_point.theta);
 	}
@@ -541,12 +549,13 @@ unsigned __stdcall navigationThread(void *p)
 		//printf("after:v = %lf m/s,w = %lf rad/s\n", send_v, send_w);
 		//fprintf(fp,"POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf\n",cur_odom.x, cur_odom.y, cur_odom.theta*180.0/M_PI,send_v,send_v,vline_dist);
 		
-		g_mtx_pose.lock();
+		//g_mtx_pose.lock();
 		State_after_vn = g_nav.getVisionNavigation_RobotState();
 		publishRobotStata(State_after_vn);
 		//g_pose = g_nav.getCurPose();
-		printf("Percent:%lf\n",State_after_vn.lave_percent);
-		g_mtx_pose.unlock();
+		//if(int(State_after_vn.lave_percent)%10 == 0 && State_after_vn.lave_percent != 100)
+		//	printf("Percent:%lf\n",State_after_vn.lave_percent);
+		//g_mtx_pose.unlock();
 
 	}
 	std::cout<<"End navigation thread."<<std::endl;

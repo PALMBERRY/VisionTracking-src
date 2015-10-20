@@ -182,7 +182,7 @@ void VisionNavigation::localization()
 				}
 				//防止误检：误检距离[]米
 				double error = euclidianDist(tmp_position,Point(cur_pose_.x,cur_pose_.y));
-				if(error < 0.7)
+				if(error < 0.3)
 				{
 				//	std::cout<<"标记点距离偏差："<<error<<std::endl;
 				//	std::cout<<"标记点校正前："<<cur_pose_.x<<","<<cur_pose_.y<<std::endl;
@@ -403,7 +403,7 @@ void VisionNavigation::navigation()
 			}
 			else
 			{
-				printf("--------------------------------------Navigation begin!----------------------------------------\n");
+				printf("------------------------------------Navigation   begin!-------------------------------------------\n");
 				first_flag = false;
 				Noline_flag = 0;
 				Move_flag = 0;
