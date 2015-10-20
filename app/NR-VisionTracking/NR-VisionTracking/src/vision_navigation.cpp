@@ -83,7 +83,7 @@ bool VisionNavigation::whichLandmark()
 	double real_dist = 10000;
 	for(which_one=0;which_one<=landmark_num;which_one++)
 	{
-	//	if( errorNormalize(landmark_point_global[which_one].theta,vline_angle_)<10/M_PI*180.0 && 
+		//	if( errorNormalize(landmark_point_global[which_one].theta,vline_angle_)<10/M_PI*180.0 && 
 		if(euclidianDist(landmark_point_global[which_one],cur_pose_)<2.0 &&
 			euclidianDist(landmark_point_global[which_one],cur_pose_)<real_dist)
 		{
@@ -106,7 +106,7 @@ bool VisionNavigation::whichLandmark()
 
 void VisionNavigation::localization()
 {
-//===TODO====//
+	//===TODO====//
 	//里程计航位推算
 	//printf("localization begin! %d\n",first_flag);
 	if(task_num)
@@ -142,10 +142,10 @@ void VisionNavigation::localization()
 			}
 			switch(pos_flag)
 			{
-				case 0:cur_pose_.theta = M_PI - vline_angle_*M_PI/180.0; break; //当前航向在90度附近
-				case 1:cur_pose_.theta = M_PI/2.0 - vline_angle_*M_PI/180.0; break;//当前航向在0度附近
-				case 2:cur_pose_.theta = -vline_angle_*M_PI/180.0;break;//当前航向在-90度附近
-				case 3:cur_pose_.theta = M_PI*1.5-vline_angle_*M_PI/180.0;break;//当前航向在180度附近
+			case 0:cur_pose_.theta = M_PI - vline_angle_*M_PI/180.0; break; //当前航向在90度附近
+			case 1:cur_pose_.theta = M_PI/2.0 - vline_angle_*M_PI/180.0; break;//当前航向在0度附近
+			case 2:cur_pose_.theta = -vline_angle_*M_PI/180.0;break;//当前航向在-90度附近
+			case 3:cur_pose_.theta = M_PI*1.5-vline_angle_*M_PI/180.0;break;//当前航向在180度附近
 			}
 			cur_pose_.normalize();
 			// 如果直线检测的角度值偏离里程计的角度值较远，则不信直线的结果
@@ -184,18 +184,18 @@ void VisionNavigation::localization()
 				double error = euclidianDist(tmp_position,Point(cur_pose_.x,cur_pose_.y));
 				if(error < 0.3)
 				{
-				//	std::cout<<"标记点距离偏差："<<error<<std::endl;
-				//	std::cout<<"标记点校正前："<<cur_pose_.x<<","<<cur_pose_.y<<std::endl;
+					//	std::cout<<"标记点距离偏差："<<error<<std::endl;
+					//	std::cout<<"标记点校正前："<<cur_pose_.x<<","<<cur_pose_.y<<std::endl;
 					cur_pose_.x = tmp_position.x;
 					cur_pose_.y = tmp_position.y;
-				//	std::cout<<"标记点校正后："<<cur_pose_.x<<","<<cur_pose_.y<<std::endl;
+					//	std::cout<<"标记点校正后："<<cur_pose_.x<<","<<cur_pose_.y<<std::endl;
 					has_vlandmark_info_ = false;
 				}
 				else
 				{
 					has_vlandmark_info_ = false;
-				//	std::cout<<"不信路标点"<<std::endl;
-				//	printf("(%lf, %lf) (%lf, %lf) (%lf,%lf) (%lf,%lf) %lf\n",landmark_point_.x/1000.0, landmark_point_.y/1000.0, tmp_position.x, tmp_position.y, cur_pose_.x, cur_pose_.y, landmark_point_global_.x, landmark_point_global_.y, cur_pose_.theta);
+					//	std::cout<<"不信路标点"<<std::endl;
+					//	printf("(%lf, %lf) (%lf, %lf) (%lf,%lf) (%lf,%lf) %lf\n",landmark_point_.x/1000.0, landmark_point_.y/1000.0, tmp_position.x, tmp_position.y, cur_pose_.x, cur_pose_.y, landmark_point_global_.x, landmark_point_global_.y, cur_pose_.theta);
 				}
 			}
 			else
@@ -379,9 +379,9 @@ void VisionNavigation::navigation()
 							Noline_flag = 0;
 							Move_flag = 1;
 							if(keep_flag)
-									temp_keep.y = cur_pose_.y;
-								else
-									temp_keep.x = cur_pose_.x;
+								temp_keep.y = cur_pose_.y;
+							else
+								temp_keep.x = cur_pose_.x;
 							lvbo_flag = true;
 						}
 					}
@@ -392,7 +392,7 @@ void VisionNavigation::navigation()
 						//	Move_flag = 1;
 						//else
 						//{
-							//printf("caiji qianyizhen data\n");
+						//printf("caiji qianyizhen data\n");
 						lvbo_flag = false;
 						pre_angle = vline_angle_;
 						pre_dist = vline_dist;
@@ -483,7 +483,7 @@ void VisionNavigation::navigation()
 				{
 					speed_w_ = 0;
 					//if(emergency_num>500)
-						//emergency_flag = true;
+					//emergency_flag = true;
 				}
 				else
 				{
@@ -555,7 +555,7 @@ void VisionNavigation::navigation()
 			}
 			/////////////////////////////Navigation Module Over/////////////////////////
 			//printf("abs:%lf TURN:%lf keep_flag:%d ",abs_turn*180/M_PI,need_turn*180/M_PI,keep_flag);
-		//	printf("POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf Theta:%lf RS:%lf lvbo:%d\n",cur_pose_.x, cur_pose_.y, cur_pose_.theta*180.0/M_PI,speed_v_,speed_w_,vline_dist_,vline_angle_,(vline_angle_-90)*0.01 + (vline_dist_-LineDist)*0.001,lvbo_flag);
+			//	printf("POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf Theta:%lf RS:%lf lvbo:%d\n",cur_pose_.x, cur_pose_.y, cur_pose_.theta*180.0/M_PI,speed_v_,speed_w_,vline_dist_,vline_angle_,(vline_angle_-90)*0.01 + (vline_dist_-LineDist)*0.001,lvbo_flag);
 		}
 		else
 		{
