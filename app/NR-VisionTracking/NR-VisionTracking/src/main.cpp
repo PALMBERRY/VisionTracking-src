@@ -50,6 +50,7 @@ CvCapture* pCapture;
 ///////// global variable ///////////////////////////////////
 // 进程外部通讯
 bool g_flag_enable_all = false; //是否开启当前模块
+bool nothing_flag;
 boost::mutex g_mtx_flag_enable_all;
 
 OrientedPoint g_odom;
@@ -60,6 +61,7 @@ boost::mutex g_mtx_task_point;
 
 OrientedPoint g_pose;  //当前机器人的位姿，当循线模块结束时，需要将该位姿告知外部
 Vision_Navigation_RobotState State_after_vn;	// 视觉导航结束后发布机器人状态
+Vision_Navigation_RobotState State_nothing;
 boost::mutex g_mtx_pose;
 
 boost::mutex g_mutex_laser;
@@ -249,18 +251,31 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 {
 	if(g_mtx_pose.try_lock())
 	{
+		Mesg_RobotState Vision_navigation_pub_state;
+		Mesg_DataUnit Vision_Navigation_data_unit;
+		Mesg_CommonData Vision_Navigation_pub_commondata;
+		Mesg_DataUnit* du = Vision_Navigation_pub_commondata.add_datas();
+		*du = Vision_Navigation_data_unit;
+
+		if(nothing_flag)
+		{
+			Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_MODULE_SLEEP);
+			Vision_Navigation_data_unit.add_values_int(3);
+			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
+			printf("VisionNavigation sleeping!\n");
+			g_flag_enable_all = false;
+			nothing_flag = false;
+		}
+
 		if(g_flag_enable_all)
 		{
-			// publish robot state message
-			Mesg_RobotState Vision_navigation_pub_state;
+			// publish robot state message			
 			Vision_navigation_pub_state.set_x(pubstate.after_VN_RobotPose.x);
 			Vision_navigation_pub_state.set_y(pubstate.after_VN_RobotPose.y);
 			Vision_navigation_pub_state.set_theta(pubstate.after_VN_RobotPose.theta);
 			SubPubManager::Instance()->m_robotstate.GetPublisher()->publish(Vision_navigation_pub_state);
 
-			// publish robot common data include rest-percent|stop|recovery-motion
-			Mesg_DataUnit Vision_Navigation_data_unit;
-			Mesg_CommonData Vision_Navigation_pub_commondata;
+			// publish robot common data include rest-percent|stop|recovery-motion			
 			if(pubstate.stop_or_not)	//if stop
 			{
 				recovery_motion_flag = true;
@@ -278,9 +293,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 					Vision_Navigation_data_unit.set_flag(Mesg_DataUnit::EDUF_DEST_REST_PERCENT);
 					Vision_Navigation_data_unit.add_values_double(pubstate.lave_percent);
 				}
-			}
-			Mesg_DataUnit* du = Vision_Navigation_pub_commondata.add_datas();
-			*du = Vision_Navigation_data_unit;
+			}			
 			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 
 			//printf("Start-Target:%lf,%lf-%lf,%lf State:%lf %lf %lf Percent:%lf\n",start_point.x,start_point.y,target.x,target.y,
@@ -289,7 +302,10 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			
 			if(pubstate.lave_percent == 100)
 			{
-				printf("Oh!task_complete\n");
+				Mesg_RobotSpeed completed_speed;
+				completed_speed.set_vx(0);completed_speed.set_vy(0);completed_speed.set_w(0);
+				SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(completed_speed);
+				printf("Oh!This task completed\n");
 				g_flag_enable_all = false;
 			}
 		}
@@ -305,11 +321,11 @@ void openVisionNav(bool open,double cur_x,double cur_y,double cur_theta)  //[m,m
 	unsigned int thread_id;
 	if(g_vis_thread_created==false && g_nav_thread_created==false)
 	{
-		static int cont = 0;
+		//static int cont = 0;
 		th = (HANDLE)_beginthreadex(NULL, 0, &visionThread, NULL, 0, &thread_id);
-		printf("%d\n",cont++);
+		//printf("%d\n",cont++);
 		th = (HANDLE)_beginthreadex(NULL, 0, &navigationThread, NULL, 0, &thread_id);
-		printf("%d\n",cont++);
+		//printf("%d\n",cont++);
 		g_vis_thread_created = g_nav_thread_created = open;
 		//std::cout<<"Enable VisionNavigation module. Create vision thread and navigation thread."<<std::endl;
 		//printf("---------------------------------------L&N Camera init complete!----------------------------------------------\n");
@@ -329,9 +345,11 @@ void update_Vision_Navigation(Mesg_NavigationTask Vision_Navi_task)
 	switch (Vision_Navi_task.flag())
 	{
 		case Mesg_NavigationTask::VISION_NAV:
-			g_flag_enable_all = true;	break;
+			nothing_flag = false; g_flag_enable_all = true;	break;
+		case Mesg_NavigationTask::NOTHING:
+			nothing_flag = true; g_flag_enable_all = false; publishRobotStata(State_nothing); break;
 		default:
-			g_flag_enable_all = false;	break;
+			nothing_flag = false; g_flag_enable_all = false;break;
 	}
 	if(g_flag_enable_all)
 	{
@@ -379,14 +397,14 @@ int main()
 
 	SubPubManager::Instance()->m_navtask.Initialize(Topic::Topic_NavTask,update_Vision_Navigation);	//接收机器人任务指令信息
 	//Single_test();
-		//subcribe
-		SubPubManager::Instance()->m_laser.Initialize(Topic::Topic_Laser,updateLaser);				//接收激光数据
-		SubPubManager::Instance()->m_odometer.Initialize(Topic::Topic_Odometer,updateOdometry);		//接收里程计数据
+	//subcribe
+	SubPubManager::Instance()->m_laser.Initialize(Topic::Topic_Laser,updateLaser);				//接收激光数据
+	SubPubManager::Instance()->m_odometer.Initialize(Topic::Topic_Odometer,updateOdometry);		//接收里程计数据
 
-		//publish
-		SubPubManager::Instance()->m_robotspeed.Initialize(Topic::Topic_Speed,NULL);				//发布机器人的速度
-		SubPubManager::Instance()->m_robotstate.Initialize(Topic::Topic_State,NULL);				//发布机器人状态信息
-		SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_State,NULL);				//发布机器人的到点信息
+	//publish
+	SubPubManager::Instance()->m_robotspeed.Initialize(Topic::Topic_Speed,NULL);				//发布机器人的速度
+	SubPubManager::Instance()->m_robotstate.Initialize(Topic::Topic_State,NULL);				//发布机器人状态信息
+	SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_CommonInfo,NULL);			//发布机器人相关信息
 	//service
 	//NODE.advertiseService<bool(bool,double,double,double)>(Service::Service_OpenVisionNav,boost::bind(openVisionNav,_1,_2,_3,_4)); //开启整个导航模块，并传入初始位姿
 	Sleep(500);
@@ -412,7 +430,6 @@ unsigned __stdcall visionThread(void *p)
 	IplImage* pFrame = NULL;
 	//获取摄像头
 	CvCapture* pCapture = cvCreateCameraCapture(-1);
-	//printf("打开摄像头成功！！！！！！！！！！！！！！！！！！！！！！！！！！%d\n",moduleEnable());
 	int index = 0; //当前处理的图像标号，每次循环加一
 	Result curResult;
 	cv::namedWindow("outPutImage");
@@ -528,6 +545,7 @@ unsigned __stdcall navigationThread(void *p)
 		State_after_vn = g_nav.getVisionNavigation_RobotState();
 		publishRobotStata(State_after_vn);
 		//g_pose = g_nav.getCurPose();
+		printf("Percent:%lf\n",State_after_vn.lave_percent);
 		g_mtx_pose.unlock();
 
 	}

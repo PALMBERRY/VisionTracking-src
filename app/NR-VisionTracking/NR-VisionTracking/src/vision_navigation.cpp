@@ -18,7 +18,7 @@ void VisionNavigation::setCurPose( const OrientedPoint& pose )
 {
 	cur_pose_ = pose;
 	start_pose_ = pose;
-	printf("get init_pose\n");
+	//printf("get init_pose\n");
 }
 
 
@@ -249,7 +249,7 @@ void VisionNavigation::navigation()
 						//{
 						//	keep_flag = true;	//keep y track x
 						//}
-						if(fabs(errorNormalize(abs_turn,M_PI/2.0))<15*M_PI/180.0 || fabs(errorNormalize(abs_turn,-1.0*M_PI/2.0))<15*M_PI/180.0)
+						if(fabs(errorNormalize(abs_turn,M_PI/2.0))<30*M_PI/180.0 || fabs(errorNormalize(abs_turn,-1.0*M_PI/2.0))<30*M_PI/180.0)
 						{
 							keep_flag = false;	//keep x track y
 						}
@@ -260,11 +260,11 @@ void VisionNavigation::navigation()
 						rejudge_flag = false;
 					}
 
-					need_turn = abs_turn - cur_pose_.theta;
-					if(need_turn > M_PI)
-						need_turn = 2.0*M_PI-need_turn;
-					if(need_turn < -1.0*M_PI)
-						need_turn = -1.0*(2.0*M_PI+need_turn);
+					need_turn = errorNormalize(cur_pose_.theta,abs_turn);
+					//if(need_turn > M_PI)
+					//	need_turn = 2.0*M_PI-need_turn;
+					//if(need_turn < -1.0*M_PI)
+					//	need_turn = -1.0*(2.0*M_PI+need_turn);
 
 					Turn_flag = 1;
 					Noline_flag = 0;
@@ -486,8 +486,8 @@ void VisionNavigation::navigation()
 				else
 				{
 					//emergency_flag = false;
-					if(fabs(need_turn)>M_PI/90.0)
-						speed_w_ = 0.2*need_turn/fabs(need_turn) + need_turn * 0.2;
+					if(fabs(need_turn)>M_PI/90.0) //2.0 deg
+						speed_w_ = 0 - (0.2*need_turn/fabs(need_turn) + need_turn * 0.2);
 					else
 						turned_flag = false;
 				}
