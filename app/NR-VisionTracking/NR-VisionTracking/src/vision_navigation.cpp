@@ -315,12 +315,13 @@ void VisionNavigation::navigation()
 				{
 					if(fabs(cur_pose_.x-target_point_.x)<3 && fabs(cur_pose_.y-target_point_.y)<3)
 					{
-						if(fabs(cur_pose_.x-target_point_.x)<0.5 && fabs(cur_pose_.y-target_point_.y)<0.5)	
+						if(fabs(cur_pose_.x-target_point_.x)<1.0 && fabs(cur_pose_.y-target_point_.y)<1.0)	
 						{
 							speed_flag = true;
-							dist_speed = euclidianDist(cur_pose_,target_point_);
+							//dist_speed = euclidianDist(cur_pose_,target_point_);
 							if(keep_flag)
 							{
+								dist_speed = fabs(cur_pose_.x-target_point_.x);
 								if(fabs(cur_pose_.x-target_point_.x)>0.05)	//task complete
 								{
 									Turn_flag = 1;
@@ -331,6 +332,7 @@ void VisionNavigation::navigation()
 							}
 							else
 							{
+								dist_speed = fabs(cur_pose_.y-target_point_.y);
 								if(fabs(cur_pose_.y-target_point_.y)>0.05)	//task complete
 								{
 									Turn_flag = 1;
@@ -425,7 +427,7 @@ void VisionNavigation::navigation()
 				emergency_num = 0;
 				if(speed_flag)
 				{
-					speed_v_ = dist_speed*0.7;
+					speed_v_ = 0.05 + dist_speed*0.45;
 				}
 				else
 					speed_v_ = 0.5;

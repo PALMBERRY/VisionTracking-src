@@ -302,11 +302,11 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			}			
 			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 
-			if(pubstate.lave_percent-percent_int>=10)
-			{
-				printf("Percent:%lf\n",pubstate.lave_percent);
-				percent_int = pubstate.lave_percent;
-			}
+			//if(pubstate.lave_percent-percent_int>=10)
+			//{
+			//	printf("Percent:%lf\n",pubstate.lave_percent);
+			//	percent_int = pubstate.lave_percent;
+			//}
 			if(pubstate.lave_percent == 100)
 			{
 				Mesg_RobotSpeed completed_speed;
@@ -337,7 +337,7 @@ void openVisionNav(bool open,double cur_x,double cur_y,double cur_theta)  //[m,m
 		//std::cout<<"Enable VisionNavigation module. Create vision thread and navigation thread."<<std::endl;
 		//printf("---------------------------------------L&N Camera init complete!----------------------------------------------\n");
 	}
-	printf("---------------------------------------L&N Camera init complete!----------------------------------------------\n");
+	printf("---------------------------------------L&N Camera init complete!-------------------------------------------\n");
 	g_mtx_flag_enable_all.unlock();
 	//return true;
 }
