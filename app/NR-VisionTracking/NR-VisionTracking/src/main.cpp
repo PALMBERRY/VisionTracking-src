@@ -21,14 +21,8 @@
 
 FILE *fp2;
 
-double Speed_A = 0.00001;
-
-
-
-//
-
-
-
+double Speed_A = 0.00002;
+// camera para
 const double para[5] = { 0.6000,   -0.8000,    0.0010,    0.0005,  327.1323 };
 
 const double cameraPara[] = { 494.3439,         0,  		349.0357,
@@ -259,7 +253,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			Mesg_DataUnit* unit_data = Vision_Navigation_pub_commondata.add_datas();
 			unit_data->set_flag(Mesg_DataUnit::EDUF_MODULE_SLEEP);
 			unit_data->add_values_int(3);
-			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
+			SubPubManager::Instance()->m_commoninfo.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 			printf("VisionNavigation sleeping!\n");
 			g_flag_enable_all = false;
 			nothing_flag = false;
@@ -300,7 +294,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 					unit_data->add_values_double(pubstate.lave_percent);
 				}
 			}			
-			SubPubManager::Instance()->m_commondata.GetPublisher()->publish(Vision_Navigation_pub_commondata);
+			SubPubManager::Instance()->m_commoninfo.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 
 			//if(pubstate.lave_percent-percent_int>=10)
 			//{
@@ -412,7 +406,7 @@ int main()
 	//publish
 	SubPubManager::Instance()->m_robotspeed.Initialize(Topic::Topic_Speed,NULL);				//发布机器人的速度
 	SubPubManager::Instance()->m_robotstate.Initialize(Topic::Topic_State,NULL);				//发布机器人状态信息
-	SubPubManager::Instance()->m_commondata.Initialize(Topic::Topic_CommonInfo,NULL);			//发布机器人相关信息
+	SubPubManager::Instance()->m_commoninfo.Initialize(Topic::Topic_CommonInfo,NULL);			//发布机器人相关信息
 	//service
 	//NODE.advertiseService<bool(bool,double,double,double)>(Service::Service_OpenVisionNav,boost::bind(openVisionNav,_1,_2,_3,_4)); //开启整个导航模块，并传入初始位姿
 	Sleep(500);
