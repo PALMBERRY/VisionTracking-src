@@ -691,5 +691,7 @@ Vision_Navigation_RobotState VisionNavigation::getVisionNavigation_RobotState()
 	pubstate_.stop_or_not = stop_can_recovery;
 	pubstate_.lave_percent = lave_percent_;
 	pubstate_.can_do = emergency_flag;
+	pubstate_.near_flag = speed_flag;
+	pubstate_.near_dist = dist_speed;
 	return pubstate_;
 }

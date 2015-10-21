@@ -204,6 +204,10 @@ void publishSpeed(double v,double w) // m/s  rad/s
 		if(g_speed_smooth.try_lock())
 		{
 			Mesg_RobotSpeed speed;
+			if(State_after_vn.near_flag)
+			{
+				Speed_A = 0.00002 + (1000-State_after_vn.near_dist)/500000;
+			}
 			if(stop_flag)
 			{
 				//printf("stop = %lf\n",stop_dist);
@@ -538,14 +542,13 @@ unsigned __stdcall navigationThread(void *p)
 		//===获取结果并发布
 		double send_v,send_w;
 		g_nav.getNavResult(send_v,send_w);		
-		publishSpeed(send_v,send_w);		
+		State_after_vn = g_nav.getVisionNavigation_RobotState();
+		publishSpeed(send_v,send_w);	
+		publishRobotStata(State_after_vn);
 		//printf("Percent:%lf\n",State_after_vn.lave_percent);
 		//printf("after:v = %lf m/s,w = %lf rad/s\n", send_v, send_w);
 		//fprintf(fp,"POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf\n",cur_odom.x, cur_odom.y, cur_odom.theta*180.0/M_PI,send_v,send_v,vline_dist);
-		
 		//g_mtx_pose.lock();
-		State_after_vn = g_nav.getVisionNavigation_RobotState();
-		publishRobotStata(State_after_vn);
 		//g_pose = g_nav.getCurPose();
 		//if(int(State_after_vn.lave_percent)%10 == 0 && State_after_vn.lave_percent != 100)
 		//	printf("Percent:%lf\n",State_after_vn.lave_percent);

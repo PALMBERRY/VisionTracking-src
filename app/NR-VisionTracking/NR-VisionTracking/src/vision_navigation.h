@@ -16,6 +16,8 @@ struct Vision_Navigation_RobotState
 	double lave_percent;
 	bool can_do;
 	bool stop_or_not;
+	bool near_flag;
+	double near_dist;
 };
 
 
