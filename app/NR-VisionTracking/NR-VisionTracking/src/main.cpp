@@ -25,12 +25,20 @@ FILE *fp2;
 
 double Speed_A;
 // camera para
-const double para[5] = { 0.6000,   -0.8000,    0.0010,    0.0005,  327.1323 };
+//const double para[5] = { 0.6000,   -0.8000,    0.0010,    0.0005,  327.1323 };
+//
+//const double cameraPara[] = { 494.3439,         0,  		349.0357,
+//0,  		491.5964,  		230.9781,
+//0, 				0, 			1.0000 };
+//const double distorPara[] = { 0,   0,   0,    0 };
 
-const double cameraPara[] = { 494.3439,         0,  		349.0357,
-0,  		491.5964,  		230.9781,
-0, 				0, 			1.0000 };
-const double distorPara[] = { 0,   0,   0,    0 };
+//double cameraPara[];
+//double para[];
+//double distorPara[];
+
+std::vector<double> cameraPara;
+std::vector<double> para;
+std::vector<double> distorPara;
 
 LineDetector lineDetector;
 
@@ -124,6 +132,7 @@ bool moduleEnable();
 
 void Set_VisionNavi_Param(void)
 {
+	NRF_ParamReader::Instance()->readParams("./params/NR_AGV_param.xml");
 	double VehicleHalfLength = 0;
 	double VehicleHalfWidth  = 0;
 	{
@@ -133,7 +142,23 @@ void Set_VisionNavi_Param(void)
 		DECLARE_PARAM_READER_END
 	}
 	g_nav.m_safe_laser_adjust.setVehicleShape(VehicleHalfLength*2.0,VehicleHalfWidth*2.0);
-	printf("VisionNavigation param init\n");
+	printf("VisionNavigation setVehicleShape init\n");
+
+	string CamExtrinPara;
+	string CamIntrinMat;
+	string CamDistorPara;
+	{
+		DECLARE_PARAM_READER_BEGIN(Sensor)
+		READ_PARAM(CamIntrinMat)
+		READ_PARAM(CamDistorPara)
+		READ_PARAM(CamExtrinPara)
+		DECLARE_PARAM_READER_END
+	
+		cameraPara = str2vec(CamExtrinPara);
+		para	   = str2vec(CamIntrinMat);
+		distorPara = str2vec(CamDistorPara);
+		printf("VisionNavigation Set_Camera param init\n");
+	}	
 }
 
 // 更新激光数据
@@ -384,8 +409,8 @@ unsigned __stdcall visionThread(void *p)
 {
 	//printf("---------------------------------------Camera init complete!----------------------------------------------\n");
 
-	lineDetector.setCamera(cameraPara, distorPara, 480, 640); //初始化部分
-	lineDetector.setExtra(para);
+	lineDetector.setCamera(&para[0], &distorPara[0], 480, 640); //初始化部分
+	lineDetector.setExtra(&cameraPara[0]);
 	//printf("---------------------------------------Camera init complete!----------------------------------------------\n");
 
 	IplImage* pFrame = NULL;
