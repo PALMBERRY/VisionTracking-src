@@ -24,15 +24,17 @@ void UltrasonicSafeAdjust::safeSpeedAdjust( RobotSpeed& send_speed,const Obstacl
 	double left = obs.data[0].mod();
 	double front = obs.data[1].mod();
 	double right = obs.data[2].mod();
-	if(left<thres_stop_side || right<thres_stop_side || front<thres_stop_front){
+
+	if(left<thres_stop_side && send_speed.w>0 || right<thres_stop_side&&send_speed.w<0){
 		send_speed.vx = send_speed.vy = send_speed.w = 0;
 		if(left<thres_stop_side){
 			COUT_COLOR(getCurTimeStr()+" Ultr stop. LEFT.",ColorType::PINK);
 		}else if(right<thres_stop_side){
 			COUT_COLOR(getCurTimeStr()+" Ultr stop. RIGHT.",ColorType::PINK);
-		}else if(front<thres_stop_front){
-			COUT_COLOR(getCurTimeStr()+" Ultr stop. FRONT.",ColorType::PINK);
 		}
+	}else if(front<thres_stop_front &&fabs(send_speed.w)<0.001){
+		send_speed.vx = send_speed.vy = 0;
+		COUT_COLOR(getCurTimeStr()+" Ultr stop. FRONT.",ColorType::PINK);
 	}else if(front<1&&vx>0){
 		double newV = generalSlow(vx,front,actual_speed.vx);
 		if(newV<vx){

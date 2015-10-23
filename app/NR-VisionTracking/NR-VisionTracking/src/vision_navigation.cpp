@@ -8,6 +8,7 @@ VisionNavigation::~VisionNavigation(void)
 {
 }
 
+
 void VisionNavigation::setCurOdom( const OrientedPoint& odom )
 {
 	previous_odom_ = cur_odom_;
@@ -261,55 +262,9 @@ void VisionNavigation::navigation()
 					}
 
 					need_turn = errorNormalize(cur_pose_.theta,abs_turn);
-					//if(need_turn > M_PI)
-					//	need_turn = 2.0*M_PI-need_turn;
-					//if(need_turn < -1.0*M_PI)
-					//	need_turn = -1.0*(2.0*M_PI+need_turn);
 
 					Turn_flag = 1;
-					Noline_flag = 0;
-					//if(errorNormalize(cur_pose_.theta,0) < 15*M_PI/180.0)
-					//{						
-					//	//keep_flag = false;	// befor    ^ y		keep x track y
-					//							//			|
-					//							//	   -----|----> x
-					//							//			|
-
-					//	//keep_flag = true;		// now	    ^ x		keep y track x
-					//							//		 	|
-					//							//	   y<---|----
-					//							//			|
-					//	if(cur_pose_.y > target_point_.y)
-					//		Turn_flag = -1;
-					//	else
-					//		Turn_flag = 1;
-					//}
-					//if(fabs(cur_pose_.theta/M_PI*180 - 90) < 15)
-					//{
-					//	keep_flag = true;	//keep y track x
-					//	if(cur_pose_.x < target_point_.x)
-					//		Turn_flag = -1;
-					//	else
-					//		Turn_flag = 1;
-					//}
-					//if(fabs(cur_pose_.theta/M_PI*180 + 90) < 15)
-					//{
-					//	keep_flag = true;	//keep y track x
-					//	if(cur_pose_.x > target_point_.x)
-					//		Turn_flag = -1;
-					//	else
-					//		Turn_flag = 1;
-					//}
-					//if(fabs(abs(cur_pose_.theta)/M_PI*180 - 180) < 15)
-					//{
-					//	keep_flag = false;	//keep x track y
-					//	if(cur_pose_.y < target_point_.y)
-					//		Turn_flag = -1;
-					//	else
-					//		Turn_flag = 1;
-					//}
-					//printf("Turn_flag = %d\n", Turn_flag);	
-					//rejudge_flag = false;
+					Noline_flag = 0;					
 				}
 				else
 				{
@@ -427,7 +382,7 @@ void VisionNavigation::navigation()
 				emergency_num = 0;
 				if(speed_flag)
 				{
-					speed_v_ = 0.05 + dist_speed*0.45;
+					speed_v_ = dist_speed*0.5;
 				}
 				else
 					speed_v_ = 0.5;
@@ -493,65 +448,6 @@ void VisionNavigation::navigation()
 					else
 						turned_flag = false;
 				}
-				//if(Turn_flag==1)
-				//{
-				//	if(abs(pre_theta)>150/180.0*M_PI)
-				//	{
-				//		if(fabs(abs(pre_theta)-abs(cur_pose_.theta))<M_PI/2.0)
-				//		{
-				//			//printf("pre_theta:%lf---cur_pose_.theta:%lf 目标点：%lf %lf\n", pre_theta, cur_pose_.theta, target_point_.x, target_point_.y);
-				//			//speed_w_ = 0.2;
-				//			speed_w_ = 0.1 + (M_PI/2.0 - fabs(abs(pre_theta)-abs(cur_pose_.theta))) * 0.2;
-				//		}
-				//		else
-				//		{
-				//			turned_flag = false;
-				//		}
-				//	}
-				//	else
-				//	{
-				//		if(fabs(pre_theta-cur_pose_.theta)<M_PI/2.0)
-				//		{
-				//			//printf("pre_theta:%lf---cur_pose_.theta:%lf 目标点：%lf %lf\n", pre_theta, cur_pose_.theta, target_point_.x, target_point_.y);
-				//			//speed_w_ = 0.2;
-				//			speed_w_ = 0.1 + (M_PI/2.0 - fabs(pre_theta-cur_pose_.theta)) * 0.2;
-				//		}
-				//		else
-				//		{
-				//			turned_flag = false;
-				//		}
-				//	}
-				//}
-				//if(Turn_flag==-1)
-				//{
-				//	if(fabs(pre_theta)>150/180.0*M_PI)	//处理180-->-180的问题
-				//	{
-				//		if(fabs(fabs(pre_theta)-fabs(cur_pose_.theta))<M_PI/2.0)
-				//		{
-				//			//printf("pre_theta:%lf---cur_pose_.theta:%lf 目标点：%lf %lf\n", pre_theta, cur_pose_.theta, target_point_.x, target_point_.y);
-				//			//speed_w_ = -0.3;
-				//			speed_w_ = -0.1 - (M_PI/2.0 - fabs(fabs(pre_theta)-fabs(cur_pose_.theta))) * 0.2;
-				//		}
-				//		else
-				//		{
-				//			turned_flag = false;
-				//		}
-				//	}
-				//	else
-				//	{
-				//		if(fabs(pre_theta-cur_pose_.theta)<M_PI/2.0)
-				//		{
-				//			//printf("pre_theta:%lf---cur_pose_.theta:%lf 目标点：%lf %lf\n", pre_theta, cur_pose_.theta, target_point_.x, target_point_.y);
-				//			//speed_w_ = -0.3;
-				//			speed_w_ = -0.1 - (M_PI/2.0 - fabs(pre_theta-cur_pose_.theta)) * 0.2;
-				//		}
-				//		else
-				//		{
-				//			turned_flag = false;
-				//		}
-				//	}
-				//}
-				//printf("POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf\n",cur_pose_.x, cur_pose_.y, cur_pose_.theta*180.0/M_PI,speed_v_,speed_w_,vline_dist);
 			}
 			/////////////////////////////Navigation Module Over/////////////////////////
 			//printf("abs:%lf TURN:%lf keep_flag:%d ",abs_turn*180/M_PI,need_turn*180/M_PI,keep_flag);
@@ -612,22 +508,6 @@ void VisionNavigation::setVlineInfo(bool haveline,double dist_left,double dist_r
 	}
 }
 
-//void VisionNavigation::setFist_flag( bool start_flag )
-//{
-//	first_flag = start_flag;	
-//	turned_flag= true;
-//	//turned_flag= false;
-//	pre_vline_flag = false;
-//	lvbo_flag = false; 
-//	emergency_flag = false;
-//	need_detect_landmark = false; //是否需要检测标记点
-//	rejudge_flag = true;
-//	speed_flag = false;
-//	speed_ = 0;
-//	task_num = true;
-//	//landmark_point_global_.x = -0.35;
-//	//landmark_point_global_.y = 9.87;
-//}
 
 bool VisionNavigation::get_landmark_flag(void)
 {

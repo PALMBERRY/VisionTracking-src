@@ -5,6 +5,7 @@
 #include "messages/MessageInteraction.h"
 #include "map/map_convert.h"
 #include "map/traval_map.h"
+#include "io/param_reader.h"
 #include <highgui.h>
 #include <time.h>
 #include "math.h"
@@ -17,11 +18,12 @@
 
 #define Cam2CenterDist	345
 #define Center_Sick 340
+#define Smooth_para	0.00003
 //#define Speed_A	0.01
 
 FILE *fp2;
 
-double Speed_A = 0.00002;
+double Speed_A;
 // camera para
 const double para[5] = { 0.6000,   -0.8000,    0.0010,    0.0005,  327.1323 };
 
@@ -82,11 +84,22 @@ bool _speed_flag = false;	// 减速
 bool stop_flag = false;		// 急停
 double stop_dist;			// 停障处理距离
 
+// 超声
+boost::mutex g_mtx_ultrsonic;
+Mesg_StopObstacle m_stop_obs;
+ObstacleData Uldata;
+PointList Laserdata;
+double Uldata_l[5],Uldata_f[5],Uldata_r[5];
+
+
+
 
 // 速度平滑
 
 double pre_v,pub_this_v;
 boost::mutex g_speed_smooth;
+RobotSpeed cur_speed;
+RobotSpeed pre_speed;
 
 
 
@@ -107,68 +120,50 @@ unsigned __stdcall navigationThread(void *p); //导航线程
 
 bool moduleEnable();
 
+
+
+void Set_VisionNavi_Param(void)
+{
+	double VehicleHalfLength = 0;
+	double VehicleHalfWidth  = 0;
+	{
+		DECLARE_PARAM_READER_BEGIN(Chassic)
+		READ_PARAM(VehicleHalfLength)
+		READ_PARAM(VehicleHalfWidth)
+		DECLARE_PARAM_READER_END
+	}
+	g_nav.m_safe_laser_adjust.setVehicleShape(VehicleHalfLength*2.0,VehicleHalfWidth*2.0);
+	printf("VisionNavigation param init\n");
+}
+
 // 更新激光数据
 void updateLaser(Mesg_Laser ldata)
 { 
 	if(g_mutex_laser.try_lock())
 	{
-	// access laser data
+		// access laser data
 		if(g_flag_enable_all)
-		{
-			int _speed_flag_num = 0, stop_flag_num = 0;
-			_speed_flag = false;
-			stop_flag = false;
-			double stop_min_dist = 1000;
+			Laserdata = transLaser(ldata);
+		g_mutex_laser.unlock();
+	}
+}
 
-			//for(int i=0;i<ldata.laser_data_size();i++)
-			for(int i=90;i<450;i++)
-			{
-				double angle = ldata.laser_data(i).angle()*3.1415926/180;	//deg->rad
-				//double dist =  ldata.laser_data(i).dist()/1000;           //mm -> m
-				double dist1 =  ldata.laser_data(i).dist();					//mm 所有dist不大于8000
-				//fprintf(fp,"%d %lf %lf\n", i, angle, dist);	
-
-				double dist = sqrt(dist1*dist1 + Center_Sick*Center_Sick - 2*dist1*Center_Sick*cos(M_PI+angle));		// a^2 = b^2+c^2-2bccos(A)
-
-				double cosangle = (dist*dist+Center_Sick*Center_Sick-dist1*dist1)/(2*dist*Center_Sick);					// cos(b) = (a^2+c^2-b^2)/(2ac)
-				angle = acos(cosangle);
-
-			//	if(i>90 && i<450)
-					//if(dist>350 && dist<500)
-				if(cosangle*dist>400 && cosangle*dist<500 && sin(angle)*dist<300)
-				{
-					stop_flag_num ++;
-					if(cosangle*dist<stop_min_dist)
-						stop_min_dist = cosangle*dist;
-
-					if(stop_flag_num>2)
-					{
-						stop_flag = true;
-						stop_dist = stop_min_dist;
-					}
-				}
-				else
-				{
-					//if(dist<1000 && dist>=500)
-					if(sin(angle)*dist<300 && cosangle*dist<1000 && cosangle*dist>=500)
-					{
-						_speed_flag_num ++;
-						if(cosangle*dist<stop_min_dist)
-							stop_min_dist = cosangle*dist;
-
-						if(_speed_flag_num>2)
-						{
-							_speed_flag = true;
-							stop_dist = stop_min_dist;
-							Speed_A = 0.00002 + (1000-stop_dist)/500000;
-						}
-						else
-							Speed_A = 0.00002;
-					}
-				}
+// 订阅超声数据
+void updateUltrsonic(Mesg_StopObstacle stop_obs_data)
+{
+	if(g_mtx_ultrsonic.try_lock())
+	{
+		m_stop_obs = stop_obs_data;
+		if(stop_obs_data.points_size()>3){
+			static std::vector<MedFilter<double> > filter(3,MedFilter<double>(5));
+			for(int i=0;i<3;i++){
+				filter[i].input(stop_obs_data.points(i).x());
+				m_stop_obs.mutable_points(i)->set_x(filter[i].output());
+				m_stop_obs.mutable_points(i)->set_y(0);
 			}
 		}
-		g_mutex_laser.unlock();
+		Uldata = transStopObs(m_stop_obs);
+		g_mtx_ultrsonic.unlock();
 	}
 }
 
@@ -186,16 +181,6 @@ void updateOdometry(Mesg_RobotState state_odata)
 	}
 }
 
-//void updateTask(Home_RobotTask task) 
-//{
-//	g_mtx_task_point.lock();
-//	g_task_point.x = task.targetpose().x();
-//	g_task_point.y = task.targetpose().y();
-//	g_task_point.theta = task.targetpose().theta();
-//	g_mtx_task_point.unlock();
-//}
-
-
 // 发布速度
 void publishSpeed(double v,double w) // m/s  rad/s
 {
@@ -203,47 +188,36 @@ void publishSpeed(double v,double w) // m/s  rad/s
 	{
 		if(g_speed_smooth.try_lock())
 		{
-			Mesg_RobotSpeed speed;
+			Mesg_RobotSpeed now;
+
 			if(State_after_vn.near_flag)
 			{
-				Speed_A = 0.00002 + (1000-State_after_vn.near_dist)/500000;
-			}
-			if(stop_flag)
-			{
-				//printf("stop = %lf\n",stop_dist);
-				pub_this_v = 0;
-				w = 0;
-				//Speed_A = 0.1;
+				Speed_A = Smooth_para + (1000-State_after_vn.near_dist)/500000;
 			}
 			else
+				Speed_A = Smooth_para;
+
+			if(fabs(v-pre_speed.vx)>Speed_A)
 			{
-				if(_speed_flag)
-				{
-					v = (stop_dist-500)/500 * v;
-				}
-
-				if(fabs(v-pre_v)>Speed_A)
-				{
-					//printf("v=%lf pre_v=%lf\n",v,pre_v);
-					if(v>pre_v)
-						pub_this_v = pre_v + Speed_A;
-					if(v<pre_v)
-						pub_this_v = pre_v - Speed_A;
-				}
-				else
-					pub_this_v = v;
+				if(v>pre_speed.vx)
+					pub_this_v = pre_speed.vx + Speed_A;
+				if(v<pre_speed.vx)
+					pub_this_v = pre_speed.vx - Speed_A;
 			}
+			else
+				pub_this_v = v;
 
-			speed.set_vx(pub_this_v); // m/s => mm/s
-			speed.set_vy(0);
-			speed.set_w(w); 
-			pre_v = pub_this_v;
-			//std::cout<<v<<","<<w<<std::endl;
-			SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(speed);
-			//printf("target_v = %lf real_v = %lf",v,pub_this_v);
+			cur_speed.vx = pub_this_v;	cur_speed.vy = 0;	cur_speed.w = w;
+
+			g_nav.m_safe_laser_adjust.safeSpeedAdjust(cur_speed,Laserdata,pre_speed);
+			g_nav.m_safe_ultra_adjust.safeSpeedAdjust(cur_speed,Uldata,pre_speed);
+
+			pre_speed = cur_speed;
+			now.set_vx(cur_speed.vx);	now.set_vy(cur_speed.vy);	now.set_w(cur_speed.w);
+			SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(now);
 			g_speed_smooth.unlock();
-		}		
-	}
+		}
+	}	
 }
 
 // 发布视觉导航后的机器人状态信息
@@ -300,11 +274,6 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			}			
 			SubPubManager::Instance()->m_commoninfo.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 
-			//if(pubstate.lave_percent-percent_int>=10)
-			//{
-			//	printf("Percent:%lf\n",pubstate.lave_percent);
-			//	percent_int = pubstate.lave_percent;
-			//}
 			if(pubstate.lave_percent == 100)
 			{
 				Mesg_RobotSpeed completed_speed;
@@ -375,7 +344,8 @@ void update_Vision_Navigation(Mesg_NavigationTask Vision_Navi_task)
 
 		}
 		printf("start @ %lf %lf %lf end @ %lf %lf %lf\n",start_point.x,start_point.y,start_point.theta*180/M_PI,target.x,target.y,target.theta*180/M_PI);
-		pre_v = 0;
+		//pre_v = 0;
+		pre_speed.vx = 0;	pre_speed.vy = 0;	pre_speed.w = 0;
 		percent_int = 0;
 		//printf("start openVisionNav\n");
 		openVisionNav(g_flag_enable_all,start_point.x,start_point.y,start_point.theta);
@@ -384,27 +354,19 @@ void update_Vision_Navigation(Mesg_NavigationTask Vision_Navi_task)
 }
 
 
-//void Single_test()
-//{
-//	g_flag_enable_all = true;
-//	printf("请输入起始点与终止点\n");
-//	scanf("%lf%lf%lf%lf%lf",&start_point.x,&start_point.y,&start_point.theta,&target.x,&target.y);
-//	printf("Start:%lf,%lf,%lf,End:%lf,%lf", start_point.x,start_point.y,start_point.theta,target.x,target.y);
-//}
-
-
 int main()
 {
 	std::cout<<"done\nInitializing SURO...\n";
 	NODE.init("NR-Vision_navigation...\n");
 	//fp2 = fopen("visiontrack_data.txt","w+");
 	//subcribe
-
+	Set_VisionNavi_Param();
 
 	SubPubManager::Instance()->m_navtask.Initialize(Topic::Topic_NavTask,update_Vision_Navigation);	//接收机器人任务指令信息
 	//Single_test();
 	//subcribe
 	SubPubManager::Instance()->m_laser.Initialize(Topic::Topic_Laser,updateLaser);				//接收激光数据
+	SubPubManager::Instance()->m_stopobs.Initialize(Topic::Topic_StopObs,updateUltrsonic);		//接收超声数据
 	SubPubManager::Instance()->m_odometer.Initialize(Topic::Topic_Odometer,updateOdometry);		//接收里程计数据
 
 	//publish
@@ -414,13 +376,6 @@ int main()
 	//service
 	//NODE.advertiseService<bool(bool,double,double,double)>(Service::Service_OpenVisionNav,boost::bind(openVisionNav,_1,_2,_3,_4)); //开启整个导航模块，并传入初始位姿
 	Sleep(500);
-
-	//if(g_flag_enable_all)
-	//{
-		//printf("start openVisionNav\n");
-		//openVisionNav(g_flag_enable_all,start_point.x,start_point.y,start_point.theta);
-	//}
-
 	NODE.spin();
 }
 
@@ -545,15 +500,6 @@ unsigned __stdcall navigationThread(void *p)
 		State_after_vn = g_nav.getVisionNavigation_RobotState();
 		publishSpeed(send_v,send_w);	
 		publishRobotStata(State_after_vn);
-		//printf("Percent:%lf\n",State_after_vn.lave_percent);
-		//printf("after:v = %lf m/s,w = %lf rad/s\n", send_v, send_w);
-		//fprintf(fp,"POSE:%lf,%lf,%lf  NAVI:%lf m/s,%lf rad/s DIST:%lf\n",cur_odom.x, cur_odom.y, cur_odom.theta*180.0/M_PI,send_v,send_v,vline_dist);
-		//g_mtx_pose.lock();
-		//g_pose = g_nav.getCurPose();
-		//if(int(State_after_vn.lave_percent)%10 == 0 && State_after_vn.lave_percent != 100)
-		//	printf("Percent:%lf\n",State_after_vn.lave_percent);
-		//g_mtx_pose.unlock();
-
 	}
 	std::cout<<"End navigation thread."<<std::endl;
 	g_nav_thread_created = false;

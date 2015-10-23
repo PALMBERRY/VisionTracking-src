@@ -3,6 +3,9 @@
 #include <vector>
 #include <boost/thread/mutex.hpp>
 #include <common/point.h>
+#include "abstract_safe_adjust.h"
+#include "laser_safe_adjust.h"
+#include "ultrasonic_safe_adjust.h"
 //#include <robot_type.h>
 
 using namespace NJRobot;
@@ -26,6 +29,11 @@ class VisionNavigation
 public:
 	VisionNavigation(void);
 	~VisionNavigation(void);
+
+
+
+	LaserSafeAdjust				m_safe_laser_adjust;
+	UltrasonicSafeAdjust		m_safe_ultra_adjust;   //add by sunqing
 
 	//set current odometer
 	void setCurOdom(const OrientedPoint& odom);

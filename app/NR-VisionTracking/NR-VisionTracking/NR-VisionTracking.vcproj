@@ -181,6 +181,10 @@
 				RelativePath=".\src\vision_navigation.cpp"
 				>
 			</File>
+			<File
+				RelativePath=".\src\vision_navigation.h"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -252,6 +256,38 @@
 				</File>
 				<File
 					RelativePath=".\src\LineDetect\lsd_wrap.hpp"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="SafeAdjust"
+				>
+				<File
+					RelativePath=".\src\SafeAdjust\abstract_motion_control.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\abstract_motion_control.h"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\abstract_safe_adjust.h"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\laser_safe_adjust.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\laser_safe_adjust.h"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\ultrasonic_safe_adjust.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\src\SafeAdjust\ultrasonic_safe_adjust.h"
 					>
 				</File>
 			</Filter>
