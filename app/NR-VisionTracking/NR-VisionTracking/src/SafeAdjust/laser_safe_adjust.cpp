@@ -97,6 +97,7 @@ void LaserSafeAdjust::safeSpeedAdjust(RobotSpeed& send_speed,const PointList & o
 		double cache_dist = m_closest_point.x-m_vehicle_length/2;  //缓冲距离，机器人前方与最近障碍物的距离
 		if(cache_dist<0) cache_dist=0;
 
+
 		if(cache_dist<=stop_dist)  //这个是没有余地的，一旦危险距离太小，不管怎么样必须停
 		{
 			m_stop_flag = true;
@@ -107,7 +108,7 @@ void LaserSafeAdjust::safeSpeedAdjust(RobotSpeed& send_speed,const PointList & o
 		{
 			double newV = generalSlow(vx,cache_dist,prev_v);
 			if(newV<vx){
-			//	COUT_COLOR(getCurTimeStr()+" Laser slow. ("<<m_closest_point<<") Dist:"<<cache_dist,ColorType::DARKBLUE);
+				COUT_COLOR(getCurTimeStr()+" Laser slow. ("<<m_closest_point<<") Dist:"<<cache_dist,ColorType::DARKBLUE);
 			}
 			vx = newV;
 		}

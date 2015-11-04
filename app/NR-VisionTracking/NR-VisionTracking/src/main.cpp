@@ -2,6 +2,8 @@
 #include <boost/bind.hpp>
 #include <opencv2/opencv.hpp>
 #include "common/utils.h"
+#include "common/timer.h"
+#include "chassis/chassis.h"
 #include "messages/MessageInteraction.h"
 #include "map/map_convert.h"
 #include "map/traval_map.h"
@@ -18,7 +20,7 @@
 
 #define Cam2CenterDist	345
 #define Center_Sick 340
-#define Smooth_para	0.00003
+#define Smooth_para	0.001
 //#define Speed_A	0.01
 
 FILE *fp2;
@@ -45,6 +47,8 @@ LineDetector lineDetector;
 
 IplImage* pFrame;//获取摄像头
 CvCapture* pCapture;
+int index; //当前处理的图像标号，每次循环加一
+Result curResult;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -54,7 +58,9 @@ CvCapture* pCapture;
 ///////// global variable ///////////////////////////////////
 // 进程外部通讯
 bool g_flag_enable_all = false; //是否开启当前模块
+bool task_completed_flag = false;
 bool nothing_flag = false;
+bool man_stop_flag = false;
 
 double percent_int = 0;
 boost::mutex g_mtx_flag_enable_all;
@@ -132,9 +138,9 @@ bool moduleEnable();
 
 void Set_VisionNavi_Param(void)
 {
-	NRF_ParamReader::Instance()->readParams("./params/NR_AGV_param.xml");
-	double VehicleHalfLength = 0;
-	double VehicleHalfWidth  = 0;
+	NRF_ParamReader::Instance()->readParams(PATH_PARAM.c_str());	// "./params/NR_AGV_param.xml"
+	double VehicleHalfLength = 0.1;
+	double VehicleHalfWidth  = 0.2;
 	{
 		DECLARE_PARAM_READER_BEGIN(Chassic)
 		READ_PARAM(VehicleHalfLength)
@@ -142,7 +148,7 @@ void Set_VisionNavi_Param(void)
 		DECLARE_PARAM_READER_END
 	}
 	g_nav.m_safe_laser_adjust.setVehicleShape(VehicleHalfLength*2.0,VehicleHalfWidth*2.0);
-	printf("VisionNavigation setVehicleShape init\n");
+	//printf("VisionNavigation setVehicleShape init Length:%lf Width:%lf\n",VehicleHalfLength,VehicleHalfWidth);
 
 	string CamExtrinPara;
 	string CamIntrinMat;
@@ -157,7 +163,9 @@ void Set_VisionNavi_Param(void)
 		cameraPara = str2vec(CamExtrinPara);
 		para	   = str2vec(CamIntrinMat);
 		distorPara = str2vec(CamDistorPara);
-		printf("VisionNavigation Set_Camera param init\n");
+		//printf("VisionNavigation Set_Camera param init\n");
+		//for(int p=0; p<cameraPara.size();++p)
+		//std::cout<<"camerPara:"<<cameraPara[p]<<std::endl;
 	}	
 }
 
@@ -169,6 +177,7 @@ void updateLaser(Mesg_Laser ldata)
 		// access laser data
 		if(g_flag_enable_all)
 			Laserdata = transLaser(ldata);
+		Laserdata = NRF_Chassis::Instance()->transform2robotFrame(Laserdata);
 		g_mutex_laser.unlock();
 	}
 }
@@ -209,15 +218,22 @@ void updateOdometry(Mesg_RobotState state_odata)
 // 发布速度
 void publishSpeed(double v,double w) // m/s  rad/s
 {
-	if(g_flag_enable_all)
+	if(g_speed_smooth.try_lock())
 	{
-		if(g_speed_smooth.try_lock())
+		if(man_stop_flag)	// 人为的停车
 		{
+			Mesg_RobotSpeed man_stop_speed;
+			man_stop_speed.set_vx(0);	man_stop_speed.set_vy(0);	man_stop_speed.set_w(0);
+			SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(man_stop_speed);
+		}
+
+		if(g_flag_enable_all)
+		{		
 			Mesg_RobotSpeed now;
 
 			if(State_after_vn.near_flag)
 			{
-				Speed_A = Smooth_para + (1000-State_after_vn.near_dist)/500000;
+				Speed_A = Smooth_para + (1.0-State_after_vn.near_dist)/500;
 			}
 			else
 				Speed_A = Smooth_para;
@@ -232,17 +248,26 @@ void publishSpeed(double v,double w) // m/s  rad/s
 			else
 				pub_this_v = v;
 
-			cur_speed.vx = pub_this_v;	cur_speed.vy = 0;	cur_speed.w = w;
+			if(g_nav.m_safe_laser_adjust.isRobotStop())
+			{
+				stop_flag = true;
+				cur_speed.vx = 0;	cur_speed.vy = 0;	cur_speed.w = 0;
+			}
+			else
+			{
+				stop_flag = false;
+				cur_speed.vx = pub_this_v;	cur_speed.vy = 0;	cur_speed.w = w;
+			}
 
 			g_nav.m_safe_laser_adjust.safeSpeedAdjust(cur_speed,Laserdata,pre_speed);
 			g_nav.m_safe_ultra_adjust.safeSpeedAdjust(cur_speed,Uldata,pre_speed);
 
 			pre_speed = cur_speed;
 			now.set_vx(cur_speed.vx);	now.set_vy(cur_speed.vy);	now.set_w(cur_speed.w);
-			SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(now);
-			g_speed_smooth.unlock();
+			SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(now);			
 		}
-	}	
+		g_speed_smooth.unlock();
+	}
 }
 
 // 发布视觉导航后的机器人状态信息
@@ -262,14 +287,14 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			nothing_flag = false;
 		}
 
-		if(g_flag_enable_all)
+		if(g_flag_enable_all || task_completed_flag)
 		{
 			Mesg_RobotState Vision_navigation_pub_state;
 			// publish robot state message			
 			Vision_navigation_pub_state.set_x(pubstate.after_VN_RobotPose.x);
 			Vision_navigation_pub_state.set_y(pubstate.after_VN_RobotPose.y);
 			Vision_navigation_pub_state.set_theta(pubstate.after_VN_RobotPose.theta);
-			SubPubManager::Instance()->m_robotstate.GetPublisher()->publish(Vision_navigation_pub_state);
+			//SubPubManager::Instance()->m_robotstate.GetPublisher()->publish(Vision_navigation_pub_state);
 
 			// publish robot common data include rest-percent|stop|recovery-motion			
 			//Mesg_DataUnit Vision_Navigation_data_unit;
@@ -277,7 +302,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 			Mesg_DataUnit* unit_data = Vision_Navigation_pub_commondata.add_datas();
 			//*unit_data = Vision_Navigation_data_unit;
 
-			//if(pubstate.stop_or_not)	//if stop
+			//if stop
 			if(stop_flag)
 			{
 				recovery_motion_flag = true;
@@ -297,15 +322,23 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 					unit_data->add_values_double(pubstate.lave_percent);
 				}
 			}			
-			SubPubManager::Instance()->m_commoninfo.GetPublisher()->publish(Vision_Navigation_pub_commondata);
+			
 
-			if(pubstate.lave_percent == 100)
+			if(!task_completed_flag && pubstate.lave_percent == 100)
 			{
 				Mesg_RobotSpeed completed_speed;
 				completed_speed.set_vx(0);completed_speed.set_vy(0);completed_speed.set_w(0);
 				SubPubManager::Instance()->m_robotspeed.GetPublisher()->publish(completed_speed);
 				printf("Oh!This task completed\n");
 				g_flag_enable_all = false;
+				task_completed_flag = true;
+			}
+			else
+			{
+				if(pubstate.lave_percent == 100)
+					printf("I have pub 100%!!\n");
+				SubPubManager::Instance()->m_robotstate.GetPublisher()->publish(Vision_navigation_pub_state);
+				SubPubManager::Instance()->m_commoninfo.GetPublisher()->publish(Vision_Navigation_pub_commondata);
 			}
 		}
 		g_mtx_pose.unlock();
@@ -315,7 +348,7 @@ void publishRobotStata(Vision_Navigation_RobotState pubstate)
 void openVisionNav(bool open,double cur_x,double cur_y,double cur_theta)  //[m,m,rad]
 {
 	g_mtx_flag_enable_all.lock();
-	g_init_pose = OrientedPoint(cur_x,cur_y,cur_theta);
+	g_init_pose = OrientedPoint(cur_x,cur_y,cur_theta);		// 定位与导航部分初始化
 	HANDLE th;
 	unsigned int thread_id;
 	if(g_vis_thread_created==false && g_nav_thread_created==false)
@@ -344,11 +377,13 @@ void update_Vision_Navigation(Mesg_NavigationTask Vision_Navi_task)
 	switch (Vision_Navi_task.flag())
 	{
 		case Mesg_NavigationTask::VISION_NAV:
-			nothing_flag = false; g_flag_enable_all = true;	break;
+			man_stop_flag = false; nothing_flag = false; g_flag_enable_all = true;	task_completed_flag = false; break;
 		case Mesg_NavigationTask::NOTHING:
-			nothing_flag = true; g_flag_enable_all = false; publishRobotStata(State_nothing); break;
+			man_stop_flag = false; nothing_flag = true; g_flag_enable_all = false; publishRobotStata(State_nothing); break;
+		case Mesg_NavigationTask::STOP_URGENT:
+			man_stop_flag = true; nothing_flag = false; g_flag_enable_all = false; publishSpeed(0,0); break;
 		default:
-			nothing_flag = false; g_flag_enable_all = false;break;
+			man_stop_flag = false; nothing_flag = false; g_flag_enable_all = false; break;
 	}
 	if(g_flag_enable_all)
 	{
@@ -407,11 +442,9 @@ int main()
 // 视觉识别进程
 unsigned __stdcall visionThread(void *p)
 {
-	//printf("---------------------------------------Camera init complete!----------------------------------------------\n");
-
 	lineDetector.setCamera(&para[0], &distorPara[0], 480, 640); //初始化部分
 	lineDetector.setExtra(&cameraPara[0]);
-	//printf("---------------------------------------Camera init complete!----------------------------------------------\n");
+	printf("---------------------------------------Camera init complete!----------------------------------------------\n");
 
 	IplImage* pFrame = NULL;
 	//获取摄像头
@@ -476,6 +509,7 @@ unsigned __stdcall visionThread(void *p)
 // 定位导航进程
 unsigned __stdcall navigationThread(void *p)
 {
+	Vision_Navigation_RobotState task_complete_state;
 	g_nav.setCurPose(g_init_pose);
 	g_nav.setInitialPreviousTarget(g_init_pose);
 	//g_nav.setFist_flag(true);
@@ -484,8 +518,8 @@ unsigned __stdcall navigationThread(void *p)
 	g_nav.setInitialPreviousOdom();
 	g_mtx_odom.unlock();
 	g_nav.setTargetPoint(target);
-
-	//printf("-------------------------------------------L&N init complete!-------------------------------------------\n");
+	printf("-------------------------------------------L&N init complete!-------------------------------------------\n");
+	
 	while(moduleEnable())
 	{
 		//printf("Module Enable\n");
@@ -515,19 +549,29 @@ unsigned __stdcall navigationThread(void *p)
 		if(has_vlandmark) g_nav.setVlandmarkInfo(landmark_point);
 		//printf("set nav_pararm\n");
 
+		double send_v,send_w;
+		//Timer loop_time;
+		//loop_time.start();
 		//===处理一次定位导航
 		g_nav.process();
-		//printf("do one time yet!\n");
-
 		//===获取结果并发布
-		double send_v,send_w;
 		g_nav.getNavResult(send_v,send_w);		
 		State_after_vn = g_nav.getVisionNavigation_RobotState();
 		publishSpeed(send_v,send_w);	
 		publishRobotStata(State_after_vn);
+		if(State_after_vn.lave_percent==100)
+		{
+			task_complete_state.lave_percent = State_after_vn.lave_percent;
+			task_complete_state.after_VN_RobotPose = State_after_vn.after_VN_RobotPose;
+		}
+		//loop_time.stop();
+		//while(loop_time.getMsecTime()<100)
+		//	Sleep(2);
+		//loop_time.stop();
 	}
-	std::cout<<"End navigation thread."<<std::endl;
+	publishRobotStata(task_complete_state);	
 	g_nav_thread_created = false;
+	std::cout<<"End navigation thread."<<std::endl;
 	ExitThread(0);
 }
 
@@ -540,3 +584,75 @@ bool moduleEnable()
 }
 
 
+
+//bool three_point_one_line(OrientedPoint cur_point, OrientedPoint mid_point, OrientedPoint next_point)
+//{
+//	double a2 = euclidianDist(cur_point,mid_point) * euclidianDist(cur_point,mid_point);
+//	double b2 = euclidianDist(next_point,mid_point) * euclidianDist(next_point,mid_point);
+//	double c2 = euclidianDist(cur_point,next_point) * euclidianDist(cur_point,next_point);
+//	double theta = acos((a2+b2-c2) / (2.0*sqrt(a2)*sqrt(b2)));	//(a^2+b^2-c^2)/2ab
+//	if(theta<0)	theta = theta + M_PI;
+//
+//	if(theta > 175.0*M_PI/180.0)	// 175-180 认为在一条直线上
+//		return true;
+//	else
+//		return false;
+//}
+//
+//
+//
+//Point get_Center(OrientedPoint cur_point, OrientedPoint mid_point, OrientedPoint next_point)
+//{
+//	//p1: cur_point.x;cur_point.y; p2: mid_point.x;mid_point.y; p3: next_point.x;next_point.y;
+//	//double k3 = (y2-y1)/(x1-x2);
+//	//double b3 = x1 - k3*y1;
+//	//double k4 = (y3-y2)/(x2-x3);
+//	//double b4 = x3 - k4*y3;
+//	//double y = (b4-b3)/(k3-k4);
+//	//double x = k3*y + b3;
+//
+//	double k3,b3,k4,b4;
+//	double thershold = 0.01;
+//	Point Center;
+//	if(fabs(cur_point.x-mid_point.x)<thershold && fabs(mid_point.x-next_point.x)>=thershold)	// k3 wuqiong da 
+//	{
+//		k4 = (next_point.y-mid_point.y)/(mid_point.x-next_point.x);
+//		b4 = next_point.x - k4*next_point.y;
+//		Center.Y = cur_point.y;
+//		Center.X = k4*Center.Y + b4;
+//	}
+//
+//	if(fabs(cur_point.x-mid_point.x)>=thershold && fabs(mid_point.x-next_point.x)<thershold)	// k4 wuqiong da
+//	{
+//		k3 = (mid_point.y-cur_point.y)/(cur_point.x-mid_point.x);
+//		b3 = cur_point.x - k3*cur_point.y;
+//		Center.Y = next_point.y;
+//		Center.X = k3*Center.Y + b3;
+//	}
+//
+//	if(fabs(cur_point.x-mid_point.x)>=thershold && fabs(mid_point.x-next_point.x)>=thershold)	// k3 k4 both not wuqiongda
+//	{
+//		k3 = (mid_point.y-cur_point.y)/(cur_point.x-mid_point.x);
+//		b3 = cur_point.x - k3*cur_point.y;
+//		k4 = (next_point.y-mid_point.y)/(mid_point.x-next_point.x);
+//		b4 = next_point.x - k4*next_point.y;
+//		Center.Y = (b4-b3)/(k3-k4);
+//		Center.X = k3*Center.Y + b3;
+//	}
+//	return Center;
+//}
+//
+//
+//bool MotionControlFSM::magic_turn( double &v_best,double &w_best,Point center,double R,bool turn_flag )
+//{
+//	//功能：magic turn ~amazing!
+//	double e_vw,e_vx;
+//	e_vx = 0.5;
+//	if(turn_flag)
+//		e_vw = e_vx/R + ((cur_point.x-center.X)*(cur_point.x-center.X)+(cur_point.y-center.Y)*(cur_point.y-center.Y)-R*R)*0.01;
+//	else
+//		e_vw = -1*(e_vx/R + ((cur_point.x-center.X)*(cur_point.x-center.X)+(cur_point.y-center.Y)*(cur_point.y-center.Y)-R*R)*0.01);
+//	v_best = e_vx;
+//	w_best = e_vw;
+//	return true;
+//}
